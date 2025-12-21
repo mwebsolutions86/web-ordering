@@ -1,17 +1,23 @@
+// web-ordering/lib/store.ts
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
 export interface CartItem {
-  id: string // <--- CHANGEMENT ICI : string (UUID) au lieu de number
+  id: string 
+  // --- NOUVEAUX CHAMPS POUR ALIGNEMENT ---
+  cartId: string // ID unique pour différencier (Burger Sans Oignon vs Burger Normal)
   name: string
   price: number
+  finalPrice: number // Prix avec options incluses
   quantity: number
+  selectedOptions: any[] 
+  removedIngredients: string[]
 }
 
 interface CartState {
   items: CartItem[]
-  addItem: (item: { id: string; name: string; price: number }) => void // <--- ICI AUSSI
-  removeItem: (id: string) => void // <--- ET ICI
+  addItem: (item: any) => void
+  removeItem: (cartId: string) => void
   clearCart: () => void
   total: () => number
 }
@@ -21,36 +27,46 @@ export const useCartStore = create<CartState>()(
     (set, get) => ({
       items: [],
       
-      addItem: (product) => {
+      addItem: (payload) => {
         set((state) => {
-          const existingItem = state.items.find((item) => item.id === product.id)
+          // Génération d'un ID unique comme sur mobile
+          const optionsStr = JSON.stringify((payload.selectedOptions || []).sort((a: any, b: any) => (a.name || '').localeCompare(b.name || '')));
+          const ingredientsStr = JSON.stringify((payload.removedIngredients || []).sort());
+          const cartId = `${payload.id}-${optionsStr}-${ingredientsStr}`;
+
+          const existingItemIndex = state.items.findIndex((item) => item.cartId === cartId);
           
-          if (existingItem) {
-            return {
-              items: state.items.map((item) =>
-                item.id === product.id
-                  ? { ...item, quantity: item.quantity + 1 }
-                  : item
-              ),
-            }
+          if (existingItemIndex > -1) {
+            const newItems = [...state.items];
+            newItems[existingItemIndex].quantity += payload.quantity;
+            return { items: newItems };
           }
           
           return {
-            items: [...state.items, { ...product, quantity: 1 }],
+            items: [...state.items, {
+              cartId,
+              id: payload.id,
+              name: payload.name,
+              price: payload.price,
+              finalPrice: payload.finalPrice || payload.price, // Fallback si pas d'options
+              quantity: payload.quantity,
+              selectedOptions: payload.selectedOptions || [],
+              removedIngredients: payload.removedIngredients || []
+            }],
           }
         })
       },
 
-      removeItem: (id) => {
+      removeItem: (cartId) => {
         set((state) => ({
-          items: state.items.filter((item) => item.id !== id),
+          items: state.items.filter((item) => item.cartId !== cartId),
         }))
       },
 
       clearCart: () => set({ items: [] }),
 
       total: () => {
-        return get().items.reduce((acc, item) => acc + (item.price * item.quantity), 0)
+        return get().items.reduce((acc, item) => acc + (item.finalPrice * item.quantity), 0)
       }
     }),
     {
