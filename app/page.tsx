@@ -49,7 +49,7 @@ export default function MenuPage() {
   const cartCount = items.reduce((acc, item) => acc + item.quantity, 0)
   const cartTotal = items.reduce((acc, item) => acc + (item.finalPrice * item.quantity), 0)
 
-  const categoryRefs = useRef<Record<string, HTMLDivElement | null>>({})
+  const categoryRefs = useRef<Record<string, HTMLElement | null>>({})
 
   // Valeurs par défaut si la DB est vide (Fallback)
   const PRIMARY = store?.primary_color || "#000000"; 
@@ -122,6 +122,8 @@ export default function MenuPage() {
                         id: group.id,
                         name: group.name,
                         type: group.max_selection > 1 ? 'multiple' : 'single', 
+                        min: group.min_selection, // <--- AJOUT CRUCIAL
+                  max: group.max_selection, // <--- AJOUT CRUCIAL
                         items: (group.items || []).filter((i: any) => i.is_available).sort((a: any, b: any) => a.price - b.price)
                     };
                 }).filter(Boolean) || [];
