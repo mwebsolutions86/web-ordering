@@ -15,8 +15,8 @@ export default function CartPage() {
   
   // --- ÉTATS DU STORE & BRANDING ---
   const [storeDeliveryFee, setStoreDeliveryFee] = useState(0); 
-  const [primaryColor, setPrimaryColor] = useState('#000000'); // Fallback Noir
-  const [secondaryColor, setSecondaryColor] = useState('#FFFFFF'); // Fallback Blanc
+  const [primaryColor, setPrimaryColor] = useState('#000000');
+  const [secondaryColor, setSecondaryColor] = useState('#FFFFFF');
   
   const [orderType, setOrderType] = useState<'dine_in' | 'takeaway' | 'delivery'>('delivery');
   const [formData, setFormData] = useState({ name: '', phone: '', address: '', notes: '' });
@@ -24,11 +24,10 @@ export default function CartPage() {
   useEffect(() => {
     setMounted(true);
     
-    // 1. Récupérer les frais ET les couleurs
     const fetchStoreSettings = async () => {
         const { data, error } = await supabase
             .from('stores')
-            .select('delivery_fees, primary_color, secondary_color') // ✅ On récupère les couleurs
+            .select('delivery_fees, primary_color, secondary_color')
             .eq('id', STORE_ID)
             .single();
         
@@ -40,6 +39,26 @@ export default function CartPage() {
     };
     fetchStoreSettings();
   }, []);
+
+  // ✅ HELPER : Fonction pour regrouper les options (Backend Logic)
+  const getGroupedOptions = (selectedOptions: any) => {
+    if (!selectedOptions) return [];
+    
+    // 1. On aplatit tout (car c'est stocké par groupe dans le store)
+    const flatOptions = Object.values(selectedOptions).flat() as any[];
+    
+    // 2. On compte les occurrences
+    const counts = flatOptions.reduce((acc: any, opt: any) => {
+        const key = opt.id || opt.name;
+        if (!acc[key]) {
+            acc[key] = { ...opt, count: 0 };
+        }
+        acc[key].count += 1;
+        return acc;
+    }, {});
+
+    return Object.values(counts);
+  };
 
   if (!mounted) return null;
 
@@ -66,12 +85,16 @@ export default function CartPage() {
     try {
       const secureItems = items.map(item => ({
         product_id: item.id,
-        product_name: item.name,
+        // ✅ CRUCIAL : On ajoute le nom pour la DB (comme sur mobile)
+        product_name: item.name, 
         quantity: item.quantity,
-        unit_price: item.unitPrice,
+        // ✅ CRUCIAL : On envoie le bon prix (unitPrice contient déjà les options)
+        unit_price: item.unitPrice, 
         total_price: item.unitPrice * item.quantity,
+        
         options: {
             variation: item.selectedVariation || null,
+            // On envoie la liste à plat pour le stockage JSON
             selectedOptions: item.selectedOptions ? Object.values(item.selectedOptions).flat() : [],
             removedIngredients: item.removedIngredients || []
         }
@@ -100,12 +123,10 @@ export default function CartPage() {
     }
   };
 
-  // --- ÉCRAN SUCCÈS ---
   if (orderComplete) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-4 text-center bg-gray-50">
         <div className="bg-white p-8 rounded-3xl shadow-xl max-w-sm w-full flex flex-col items-center animate-in zoom-in-95 duration-300">
-            {/* Icône dynamique */}
             <CheckCircle style={{ color: primaryColor }} className="w-16 h-16 mb-4" />
             <h1 className="text-2xl font-bold text-gray-900">C'est validé !</h1>
             <p className="text-gray-500 mt-2 mb-8">Votre commande a bien été transmise au restaurant.</p>
@@ -121,7 +142,6 @@ export default function CartPage() {
     );
   }
 
-  // --- PANIER VIDE ---
   if (items.length === 0) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-4">
@@ -138,7 +158,6 @@ export default function CartPage() {
     );
   }
 
-  // --- PANIER REMPLI ---
   return (
     <div className="max-w-4xl mx-auto px-4 py-8 pb-32 font-sans">
       <div className="flex items-center mb-8">
@@ -153,7 +172,7 @@ export default function CartPage() {
         {/* COLONNE GAUCHE */}
         <div className="lg:col-span-2 space-y-6">
           
-          {/* 1. SÉLECTEUR DE TYPE DE COMMANDE (COULEURS DYNAMIQUES) */}
+          {/* SÉLECTEUR DE TYPE (COULEURS DYNAMIQUES) */}
           <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm">
             <h2 className="text-lg font-bold text-gray-900 mb-4">Mode de retrait</h2>
             <div className="grid grid-cols-3 gap-3">
@@ -172,7 +191,7 @@ export default function CartPage() {
                             style={isActive ? { backgroundColor: primaryColor, borderColor: primaryColor, color: secondaryColor } : {}}
                             className={`flex flex-col items-center justify-center gap-2 p-3 rounded-xl border-2 transition-all ${
                                 isActive 
-                                ? '' // Style inline gère la couleur
+                                ? '' 
                                 : 'border-gray-100 hover:border-gray-200 text-gray-600 bg-white'
                             }`}
                         >
@@ -184,9 +203,13 @@ export default function CartPage() {
             </div>
           </div>
 
-          {/* 2. LISTE DES ARTICLES */}
+          {/* LISTE DES ARTICLES */}
           <div className="space-y-4">
-            {items.map((item) => (
+            {items.map((item) => {
+                // ✅ Utilisation du Helper pour l'affichage groupé
+                const groupedOptions = getGroupedOptions(item.selectedOptions);
+
+                return (
                 <div key={item.cartId} className="bg-white border border-gray-100 rounded-2xl p-5 flex justify-between items-start shadow-sm">
                 <div className="flex-1">
                     <div className='flex items-center gap-2'>
@@ -198,12 +221,13 @@ export default function CartPage() {
                         )}
                     </div>
 
-                    {/* Options */}
-                    {item.selectedOptions && Object.keys(item.selectedOptions).length > 0 && (
+                    {/* ✅ Affichage Options Groupées (2x Mayo...) */}
+                    {groupedOptions.length > 0 && (
                         <div className="flex flex-wrap gap-2 mt-2">
-                            {Object.values(item.selectedOptions).flat().map((opt: any, idx: number) => (
+                            {groupedOptions.map((opt: any, idx: number) => (
                                 <span key={idx} className="text-xs font-bold text-slate-700 bg-slate-50 px-2 py-1 rounded-md border border-slate-200">
-                                    + {opt.name}
+                                    {opt.count > 1 ? `${opt.count}x ` : '+ '}
+                                    {opt.name}
                                 </span>
                             ))}
                         </div>
@@ -223,7 +247,6 @@ export default function CartPage() {
                     <div className="mt-3 flex items-center gap-4 text-sm text-gray-500 font-medium">
                         <p>Qté: {item.quantity}</p>
                         <span className="w-1 h-1 bg-gray-300 rounded-full"></span>
-                        {/* Prix en couleur primaire pour ressortir */}
                         <p style={{ color: primaryColor }} className="font-bold text-base">{(item.unitPrice * item.quantity).toFixed(2)} DH</p>
                     </div>
                 </div>
@@ -235,10 +258,10 @@ export default function CartPage() {
                     <Trash2 size={20} />
                 </button>
                 </div>
-            ))}
+            )})}
           </div>
 
-          {/* 3. FORMULAIRE */}
+          {/* FORMULAIRE */}
           <form id="orderForm" onSubmit={handleSubmit} className="bg-white border border-gray-100 rounded-2xl p-6 space-y-4 shadow-sm">
             <h2 className="text-xl font-bold text-gray-900 mb-2">Vos Coordonnées</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -306,7 +329,6 @@ export default function CartPage() {
               <p className="text-xs text-gray-400 text-center mt-2">*Paiement en espèces à la réception</p>
             </div>
             
-            {/* BOUTON COMMANDER AVEC COULEUR DYNAMIQUE */}
             <button 
                 form="orderForm" 
                 type="submit" 
