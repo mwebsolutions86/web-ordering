@@ -1,8 +1,16 @@
+/** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Vos options de configuration vont ici
   reactStrictMode: true,
   images: {
-    domains: ['ton-domaine.com'], // Ajoutez les domaines d'images si nécessaire
+    remotePatterns: [
+      {
+        protocol: 'https',
+        // C'est l'adresse de votre projet Supabase (celle qui apparaît dans l'erreur)
+        hostname: 'kdoodpxjgczqajykcqcd.supabase.co',
+        port: '',
+        pathname: '/storage/v1/object/public/**',
+      },
+    ],
   },
 };
 

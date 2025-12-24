@@ -1,76 +1,78 @@
-// web-ordering/lib/store.ts
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { persist, createJSONStorage } from 'zustand/middleware'
 
-export interface CartItem {
-  id: string 
-  // --- NOUVEAUX CHAMPS POUR ALIGNEMENT ---
-  cartId: string // ID unique pour différencier (Burger Sans Oignon vs Burger Normal)
-  name: string
-  price: number
-  finalPrice: number // Prix avec options incluses
-  quantity: number
-  selectedOptions: any[] 
-  removedIngredients: string[]
+// 1. Définition stricte des types
+export type CartOptionItem = {
+  id: string;
+  name: string;
+  price: number;
 }
 
-interface CartState {
+export type CartItem = {
+  cartId: string;     // ID unique dans le panier
+  id: string;         // ID du produit
+  name: string;
+  image_url: string | null;
+  unitPrice: number;  // PRIX UNITAIRE FINAL (Base + Options)
+  quantity: number;
+  
+  // Champs complexes
+  selectedVariation?: { id: string; name: string; price: number } | null;
+  // Record<GroupId, Array<OptionItems>>
+  selectedOptions?: Record<string, CartOptionItem[]>; 
+  removedIngredients?: string[];
+}
+
+interface CartStore {
   items: CartItem[]
-  addItem: (item: any) => void
+  addItem: (item: CartItem) => void
   removeItem: (cartId: string) => void
+  updateQuantity: (cartId: string, quantity: number) => void
   clearCart: () => void
-  total: () => number
 }
 
-export const useCartStore = create<CartState>()(
+export const useCartStore = create<CartStore>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       items: [],
       
-      addItem: (payload) => {
-        set((state) => {
-          // Génération d'un ID unique comme sur mobile
-          const optionsStr = JSON.stringify((payload.selectedOptions || []).sort((a: any, b: any) => (a.name || '').localeCompare(b.name || '')));
-          const ingredientsStr = JSON.stringify((payload.removedIngredients || []).sort());
-          const cartId = `${payload.id}-${optionsStr}-${ingredientsStr}`;
+      addItem: (newItem) => set((state) => {
+        // Log pour vérifier ce qui arrive dans le store (Ouvrir Console F12)
+        console.log("📥 Store adding item:", newItem);
 
-          const existingItemIndex = state.items.findIndex((item) => item.cartId === cartId);
-          
-          if (existingItemIndex > -1) {
-            const newItems = [...state.items];
-            newItems[existingItemIndex].quantity += payload.quantity;
-            return { items: newItems };
-          }
-          
-          return {
-            items: [...state.items, {
-              cartId,
-              id: payload.id,
-              name: payload.name,
-              price: payload.price,
-              finalPrice: payload.finalPrice || payload.price, // Fallback si pas d'options
-              quantity: payload.quantity,
-              selectedOptions: payload.selectedOptions || [],
-              removedIngredients: payload.removedIngredients || []
-            }],
-          }
-        })
-      },
+        // On vérifie si un item IDENTIQUE existe déjà pour fusionner les quantités
+        // Attention : la comparaison d'objets (options) nécessite JSON.stringify
+        const existingItemIndex = state.items.findIndex(
+            i => i.id === newItem.id && 
+            JSON.stringify(i.selectedVariation) === JSON.stringify(newItem.selectedVariation) &&
+            JSON.stringify(i.selectedOptions) === JSON.stringify(newItem.selectedOptions) &&
+            JSON.stringify(i.removedIngredients) === JSON.stringify(newItem.removedIngredients)
+        );
 
-      removeItem: (cartId) => {
-        set((state) => ({
-          items: state.items.filter((item) => item.cartId !== cartId),
-        }))
-      },
+        if (existingItemIndex > -1) {
+            const updatedItems = [...state.items];
+            updatedItems[existingItemIndex].quantity += newItem.quantity;
+            return { items: updatedItems };
+        }
+
+        return { items: [...state.items, newItem] };
+      }),
+
+      removeItem: (cartId) => set((state) => ({
+        items: state.items.filter((item) => item.cartId !== cartId),
+      })),
+
+      updateQuantity: (cartId, quantity) => set((state) => ({
+        items: state.items.map((item) =>
+          item.cartId === cartId ? { ...item, quantity } : item
+        ),
+      })),
 
       clearCart: () => set({ items: [] }),
-
-      total: () => {
-        return get().items.reduce((acc, item) => acc + (item.finalPrice * item.quantity), 0)
-      }
     }),
     {
-      name: 'cart-storage',
+      name: 'cart-storage', // Clé dans le LocalStorage
+      storage: createJSONStorage(() => localStorage),
     }
   )
 )
