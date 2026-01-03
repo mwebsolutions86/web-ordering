@@ -21,6 +21,7 @@ export type CartItem = {
   // Record<GroupId, Array<OptionItems>>
   selectedOptions?: Record<string, CartOptionItem[]>; 
   removedIngredients?: string[];
+  note?: string;
 }
 
 interface CartStore {
@@ -46,7 +47,9 @@ export const useCartStore = create<CartStore>()(
             i => i.id === newItem.id && 
             JSON.stringify(i.selectedVariation) === JSON.stringify(newItem.selectedVariation) &&
             JSON.stringify(i.selectedOptions) === JSON.stringify(newItem.selectedOptions) &&
-            JSON.stringify(i.removedIngredients) === JSON.stringify(newItem.removedIngredients)
+            JSON.stringify(i.removedIngredients) === JSON.stringify(newItem.removedIngredients)&&
+            (i.note || '') === (newItem.note || '')
+            
         );
 
         if (existingItemIndex > -1) {

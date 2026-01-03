@@ -83,20 +83,23 @@ export default function CartPage() {
     setIsSubmitting(true);
 
     try {
+      // ✅ CORRECTION APPLIQUÉE ICI : Mapping JSON strict pour le POS
       const secureItems = items.map(item => ({
         product_id: item.id,
-        // ✅ CRUCIAL : On ajoute le nom pour la DB (comme sur mobile)
         product_name: item.name, 
         quantity: item.quantity,
-        // ✅ CRUCIAL : On envoie le bon prix (unitPrice contient déjà les options)
         unit_price: item.unitPrice, 
         total_price: item.unitPrice * item.quantity,
         
+        // Structure JSON attendue par le POS (OrderUI.tsx)
         options: {
             variation: item.selectedVariation || null,
-            // On envoie la liste à plat pour le stockage JSON
-            selectedOptions: item.selectedOptions ? Object.values(item.selectedOptions).flat() : [],
-            removedIngredients: item.removedIngredients || []
+            // Clé 'options' et non 'selectedOptions'
+            options: item.selectedOptions ? Object.values(item.selectedOptions).flat() : [],
+            // Clé snake_case 'removed_ingredients'
+            removed_ingredients: item.removedIngredients || [],
+            // Ajout de la note si présente
+            note: item.note || ''
         }
       }));
 
@@ -107,7 +110,8 @@ export default function CartPage() {
         p_delivery_address: orderType === 'delivery' ? formData.address : `[${orderType.toUpperCase()}]`,
         p_order_type: orderType,
         p_items: secureItems,
-        p_notes: formData.notes
+        p_notes: formData.notes,
+        //total_amount: finalTotal,
       });
 
       if (error) throw error;
