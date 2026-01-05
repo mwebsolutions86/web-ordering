@@ -5,9 +5,10 @@ import Link from 'next/link';
 import { useCartStore } from '@/lib/store';
 import { ShoppingBag, Trash2, ArrowLeft, Loader2, CheckCircle, Ban, Utensils, ShoppingBag as BagIcon, Bike } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { STORE_ID } from '@/lib/constants';
+import { useStore } from '@/lib/store-provider';
 
 export default function CartPage() {
+  const { currentStore } = useStore();
   const { items, removeItem, clearCart } = useCartStore();
   const [mounted, setMounted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -25,10 +26,12 @@ export default function CartPage() {
     setMounted(true);
     
     const fetchStoreSettings = async () => {
+        if (!currentStore) return;
+        
         const { data, error } = await supabase
             .from('stores')
             .select('delivery_fees, primary_color, secondary_color')
-            .eq('id', STORE_ID)
+            .eq('id', currentStore.id)
             .single();
         
         if (data && !error) {
@@ -38,7 +41,7 @@ export default function CartPage() {
         }
     };
     fetchStoreSettings();
-  }, []);
+  }, [currentStore]);
 
   // ✅ HELPER : Fonction pour regrouper les options (Backend Logic)
   const getGroupedOptions = (selectedOptions: any) => {
@@ -103,8 +106,13 @@ export default function CartPage() {
         }
       }));
 
+      if (!currentStore) {
+        alert("Store non sélectionné");
+        return;
+      }
+      
       const { data, error } = await supabase.rpc('create_order_secure', {
-        p_store_id: STORE_ID,
+        p_store_id: currentStore.id,
         p_customer_name: formData.name,
         p_customer_phone: formData.phone,
         p_delivery_address: orderType === 'delivery' ? formData.address : `[${orderType.toUpperCase()}]`,

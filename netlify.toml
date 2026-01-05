@@ -1,0 +1,90 @@
+# Configuration Netlify pour Web Ordering PWA
+[build]
+  publish = ".next"
+  command = "npm run build"
+  
+  # Variables d'environnement
+  [build.environment]
+    NODE_VERSION = "18"
+    NEXT_PUBLIC_SUPABASE_URL = "https://kdoodpxjgczqajykcqcd.supabase.co"
+    NEXT_PUBLIC_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"
+    NODE_ENV = "production"
+
+# Headers de sécurité et performance
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-XSS-Protection = "1; mode=block"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "geolocation=(), microphone=(), camera=()"
+    Strict-Transport-Security = "max-age=31536000; includeSubDomains"
+
+# Headers pour les fichiers PWA
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"
+    Service-Worker-Allowed = "/"
+
+[[headers]]
+  for = "/manifest.json"
+  [headers.values]
+    Content-Type = "application/manifest+json"
+    Cache-Control = "public, max-age=31536000"
+
+[[headers]]
+  for = "/offline.html"
+  [headers.values]
+    Content-Type = "text/html"
+    Cache-Control = "public, max-age=31536000"
+
+# Headers pour les assets statiques
+[[headers]]
+  for = "/_next/static/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/images/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000"
+
+# Headers pour les polices
+[[headers]]
+  for = "/fonts/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000"
+
+# Redirections pour PWA
+[[redirects]]
+  from = "/"
+  to = "/"
+  status = 200
+  conditions = {Role = ["user", "admin"]}
+
+[[redirects]]
+  from = "/*"
+  to = "/offline.html"
+  status = 200
+  force = true
+
+# Configuration des plugins
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+[[plugins]]
+  package = "netlify-plugin-cache"
+  [plugins.inputs]
+    paths = ["node_modules", ".next/cache"]
+
+# Configuration du cache
+[context.production.environment]
+  NEXT_PRIVATE_TARGET = "server"
+
+[context.deploy-preview.environment]
+  NEXT_PRIVATE_TARGET = "server"
+
+[context.branch-deploy.environment]
+  NEXT_PRIVATE_TARGET = "server"

@@ -5,8 +5,12 @@ import { supabase } from '@/lib/supabase'
 import { useCartStore } from '@/lib/store'
 import { ShoppingBag, Plus, Loader2, Star, Clock, MapPin, Search, ChevronRight, Leaf, Layers } from 'lucide-react'
 import Link from 'next/link'
-import { BRAND_ID, STORE_ID } from '@/lib/constants'
 import ProductModal from '@/components/ProductModal'
+import { useStore } from '@/lib/store-provider'
+import PWAIntegration from '@/components/pwa/PWAIntegration'
+import AutoPreloader from '@/components/LazyRoute'
+import OptimizedImage from '@/components/OptimizedImage'
+import { usePWAMetrics } from '@/components/pwa/PWAIntegration'
 
 // --- TYPES ---
 type ProductVariation = { id: string; name: string; price: number }
@@ -19,6 +23,7 @@ type Category = { id: string; name: string; products: Product[] }
 type StoreInfo = { name: string; logo_url: string | null; primary_color: string; secondary_color: string; description: string | null }
 
 export default function MenuPage() {
+  const { currentStore } = useStore();
   const [categories, setCategories] = useState<Category[]>([])
   const [store, setStore] = useState<StoreInfo | null>(null)
   const [loading, setLoading] = useState(true)
@@ -40,6 +45,10 @@ export default function MenuPage() {
   const categoryRefs = useRef<Record<string, HTMLElement | null>>({})
   const PRIMARY = store?.primary_color || "#000000"; 
   const SECONDARY = store?.secondary_color || "#FFFFFF";
+  
+  // Métriques PWA
+  const { trackPWAUsage, trackUserEngagement } = usePWAMetrics();
+  const pageLoadTime = Date.now();
 
   useEffect(() => {
     fetchData()
@@ -61,8 +70,13 @@ export default function MenuPage() {
   }, [categories]);
 
   const fetchData = async () => {
+    if (!currentStore) {
+      setLoading(false);
+      return;
+    }
+    
     try {
-      const { data: storeData } = await supabase.from('stores').select('name, logo_url, primary_color, secondary_color, description').eq('id', STORE_ID).single();
+      const { data: storeData } = await supabase.from('stores').select('name, logo_url, primary_color, secondary_color, description').eq('id', currentStore.id).single();
       if (storeData) setStore(storeData);
 
       const { data, error } = await supabase.from('categories').select(`
@@ -73,7 +87,7 @@ export default function MenuPage() {
             product_ingredients ( ingredient: ingredients ( name ) ),
             product_option_links ( group: option_groups ( id, name, min_selection, max_selection, items: option_items ( id, name, price, is_available ) ) )
           )
-        `).eq('brand_id', BRAND_ID).eq('products.is_available', true).order('rank')
+        `).eq('brand_id', currentStore.brand_id).eq('products.is_available', true).order('rank')
 
       if (error) throw error
 
@@ -94,6 +108,12 @@ export default function MenuPage() {
       if(cleanData.length > 0) setActiveCategory(cleanData[0].id)
     } catch (error) { console.error(error) } finally { setLoading(false) }
   }
+
+  useEffect(() => {
+    if (currentStore) {
+      fetchData();
+    }
+  }, [currentStore])
 
   const scrollToCategory = (id: string) => {
     setActiveCategory(id);
