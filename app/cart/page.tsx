@@ -140,7 +140,7 @@ export default function CartPage() {
       <div className="min-h-screen flex flex-col items-center justify-center p-4 text-center bg-gray-50">
         <div className="bg-white p-8 rounded-3xl shadow-xl max-w-sm w-full flex flex-col items-center animate-in zoom-in-95 duration-300">
             <CheckCircle style={{ color: primaryColor }} className="w-16 h-16 mb-4" />
-            <h1 className="text-2xl font-bold text-gray-900">C'est validé !</h1>
+            <h1 className="text-2xl font-bold text-gray-900">C&apos;est validé !</h1>
             <p className="text-gray-500 mt-2 mb-8">Votre commande a bien été transmise au restaurant.</p>
             <Link 
                 href="/" 

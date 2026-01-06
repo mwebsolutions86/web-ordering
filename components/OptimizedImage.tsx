@@ -268,7 +268,8 @@ export function useImageOptimization() {
   const preloadImage = useCallback((src: string, priority: 'high' | 'low' = 'low') => {
     if (preloadedImages.has(src)) return;
 
-    const img = new Image();
+    // Use the global Image constructor explicitly to avoid conflicts with the `Image` import
+    const img = new (window as any).Image();
     img.src = src;
     
     img.onload = () => {

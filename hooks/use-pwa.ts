@@ -46,7 +46,7 @@ export function usePWA() {
   // Demander l'installation
   const requestInstall = useCallback(async () => {
     if (!deferredPrompt) {
-      throw new Error('Le prompt d\'installation n\'est pas disponible');
+      throw new Error('Le prompt d\u0027installation n\u0027est pas disponible');
     }
 
     try {
@@ -61,7 +61,7 @@ export function usePWA() {
         return { success: false, outcome };
       }
     } catch (error) {
-      console.error('Erreur lors de l\'installation:', error);
+      console.error('Erreur lors de l\u0027installation:', error);
       return { success: false, error: error instanceof Error ? error.message : 'Erreur inconnue' };
     }
   }, [deferredPrompt]);
@@ -164,7 +164,7 @@ export function usePWA() {
           });
         })
         .catch((error) => {
-          console.error('Erreur lors de l\'enregistrement du service worker:', error);
+          console.error('Erreur lors de l\u0027enregistrement du service worker:', error);
         });
 
       // Écouter l'activation du contrôleur
@@ -241,18 +241,20 @@ export function usePWANotifications() {
       throw new Error('Permission de notification non accordée');
     }
 
-    if (!state.registration) {
+    // Récupérer l'enregistrement du service worker au moment de l'envoi
+    const registration = await navigator.serviceWorker.getRegistration();
+    if (!registration) {
       throw new Error('Service worker non enregistré');
     }
 
     try {
-      await state.registration.showNotification(title, {
+      await registration.showNotification(title, {
         icon: '/icons/icon-192x192.png',
         badge: '/icons/badge-72x72.png',
         ...options
-      });
+      } as any);
     } catch (error) {
-      console.error('Erreur lors de l\'affichage de la notification:', error);
+      console.error('Erreur lors de l\u0027affichage de la notification:', error);
     }
   }, [permission]);
 

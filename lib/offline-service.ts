@@ -30,11 +30,11 @@ export class OfflineService {
   };
 
   constructor() {
-    this.initDB();
+    // Do not auto-initialize IndexedDB during module import (SSR). Call `initDB()` from client code.
   }
 
   // Initialiser IndexedDB
-  private async initDB(): Promise<void> {
+  public async initDB(): Promise<void> {
     return new Promise((resolve, reject) => {
       const request = indexedDB.open(this.dbName, this.dbVersion);
 
@@ -391,9 +391,14 @@ export async function initOfflineService(): Promise<void> {
     // Configurer la synchronisation automatique
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.ready.then((registration) => {
-        // Enregistrer la synchronisation en arrière-plan
-        if ('sync' in registration) {
-          registration.sync.register('background-sync');
+        // Enregistrer la synchronisation en arrière-plan si disponible
+        try {
+          const syncManager = (registration as any).sync;
+          if (syncManager && typeof syncManager.register === 'function') {
+            syncManager.register('background-sync').catch(() => {});
+          }
+        } catch (e) {
+          // Ignorer les erreurs si l'API n'est pas supportée
         }
       });
     }

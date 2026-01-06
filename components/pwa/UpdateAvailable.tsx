@@ -50,7 +50,7 @@ export default function UpdateAvailable({ onUpdate, onDismiss }: UpdateAvailable
             Mise à jour disponible
           </h3>
           <p className="text-xs text-gray-600 mt-1">
-            Une nouvelle version de l'application est disponible avec des améliorations.
+            Une nouvelle version de l&apos;application est disponible avec des améliorations.
           </p>
           <div className="flex gap-2 mt-3">
             <button
@@ -98,11 +98,12 @@ export function BackgroundUpdate() {
           body: 'Une nouvelle version est disponible. Actualisez pour obtenir les dernières fonctionnalités.',
           icon: '/icons/icon-192x192.png',
           tag: 'app-update',
+          // Some TS DOM libs don't include "actions" on NotificationOptions; cast to any to support it
           actions: [
             { action: 'update', title: 'Mettre à jour' },
             { action: 'dismiss', title: 'Plus tard' }
           ]
-        });
+        } as any);
       }
     }
   }, [hasUpdate, registration]);

@@ -35,7 +35,8 @@ export class InstallManager {
   private listeners: Array<(event: string, data?: any) => void> = [];
 
   constructor() {
-    this.init();
+    // Do not auto-initialize to avoid running browser-only code during SSR.
+    // Call `init()` explicitly from client-side code when needed.
   }
 
   private init(): void {
@@ -138,7 +139,7 @@ export class InstallManager {
         };
       }
     } catch (error) {
-      console.error('Erreur lors de l\'installation:', error);
+      console.error('Erreur lors de l\u0027installation:', error);
       this.trackInstallation('error', undefined, error);
       
       return {
@@ -511,8 +512,8 @@ export class InstallManager {
     };
 
     // Envoyer à l'analytique (si configuré)
-    if (typeof gtag !== 'undefined') {
-      gtag('event', 'pwa_install', eventData);
+    if (typeof window !== 'undefined' && (window as any).gtag) {
+      (window as any).gtag('event', 'pwa_install', eventData);
     }
 
     // Log pour le debug

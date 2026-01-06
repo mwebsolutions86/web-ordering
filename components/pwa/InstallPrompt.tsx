@@ -74,7 +74,7 @@ export default function InstallPrompt({ onInstall, onDismiss }: InstallPromptPro
       setDeferredPrompt(null);
       setShowPrompt(false);
     } catch (error) {
-      console.error('Erreur lors de l\'installation:', error);
+      console.error('Erreur lors de l\u0027installation:', error);
     }
   };
 
@@ -99,7 +99,7 @@ export default function InstallPrompt({ onInstall, onDismiss }: InstallPromptPro
             Installez Universal Eats
           </h3>
           <p className="text-xs text-gray-600 mt-1">
-            Accédez rapidement à vos commandes et utilisez l'app hors ligne
+            Accédez rapidement à vos commandes et utilisez l&apos;app hors ligne
           </p>
           <div className="flex gap-2 mt-3">
             <button

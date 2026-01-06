@@ -75,7 +75,7 @@ function RouteError({ error, reset }: { error: Error; reset: () => void }) {
       <div className="text-center max-w-md mx-auto p-6">
         <AlertTriangle className="w-16 h-16 text-red-500 mx-auto mb-4" />
         <h2 className="text-xl font-semibold text-gray-900 mb-2">
-          Oups ! Une erreur s'est produite
+          Oups ! Une erreur s&apos;est produite
         </h2>
         <p className="text-gray-600 mb-6">
           Nous ne pouvons pas charger cette page pour le moment.
@@ -231,14 +231,14 @@ class RoutePreloader {
     };
   }
 
-  private getLoaderForRoute(routeName?: string | null) {
+  public getLoaderForRoute(routeName?: string | null) {
     if (!routeName) return null;
 
     const loaders: Record<string, () => Promise<{ default: ComponentType<any> }>> = {
-      '/cart': () => import('@/app/cart/page'),
-      '/loyalty': () => import('@/app/loyalty/page'),
-      '/promotions': () => import('@/app/promotions/page'),
-      '/profile': () => import('@/app/profile/page')
+      '/cart': () => import('@/app/cart/page')
+      // Note: other routes (e.g., loyalty, promotions, profile) may not be present in this app.
+      // Attempting to statically import missing pages causes build-time errors, so we only
+      // provide loaders for routes that exist in this workspace.
     };
 
     return loaders[routeName];
@@ -275,27 +275,50 @@ export default function LazyRoute({
 }: LazyRouteProps) {
   const LazyComponent = lazy(component);
 
-  return (
-    <Suspense
-      fallback={
-        fallback || <RouteSkeleton route={route} />
+  // Error boundary to catch rendering errors in the async component
+  class ErrorBoundary extends React.Component<React.PropsWithChildren<{ fallback?: React.ComponentType<{ error: Error; reset: () => void }> }>, { hasError: boolean; error?: Error }> {
+    state: { hasError: boolean; error?: Error } = { hasError: false, error: undefined };
+
+    static getDerivedStateFromError(error: Error) {
+      return { hasError: true, error };
+    }
+
+    componentDidCatch(error: Error) {
+      // You could report errors here to an analytics service
+      console.error('ErrorBoundary caught an error:', error);
+    }
+
+    reset = () => this.setState({ hasError: false, error: undefined });
+
+    render() {
+      if (this.state.hasError) {
+        const Fallback = this.props.fallback || RouteError;
+        return <Fallback error={this.state.error!} reset={this.reset} />;
       }
-      errorBoundary={{
-        fallback: errorFallback
-      }}
-    >
-      <LazyComponent />
-    </Suspense>
+      return this.props.children as React.ReactElement;
+    }
+  }
+
+  return (
+    <ErrorBoundary fallback={errorFallback}>
+      <Suspense fallback={fallback || <RouteSkeleton route={route} />}>
+        <LazyComponent />
+      </Suspense>
+    </ErrorBoundary>
   );
 }
 
 // Routes pré-définies avec lazy loading
+const PlaceholderPage: React.FC = () => (
+  <div className="p-8 text-center text-gray-600">Page non disponible</div>
+);
+
 export const LazyRoutes = {
   CartPage: lazy(() => import('@/app/cart/page')),
-  LoyaltyPage: lazy(() => import('@/app/loyalty/page')),
-  PromotionsPage: lazy(() => import('@/app/promotions/page')),
-  ProfilePage: lazy(() => import('@/app/profile/page')),
-  OrdersPage: lazy(() => import('@/app/orders/page'))
+  LoyaltyPage: lazy(async () => ({ default: PlaceholderPage })),
+  PromotionsPage: lazy(async () => ({ default: PlaceholderPage })),
+  ProfilePage: lazy(async () => ({ default: PlaceholderPage })),
+  OrdersPage: lazy(async () => ({ default: PlaceholderPage }))
 };
 
 // Hook pour la gestion du préchargement intelligent
@@ -305,8 +328,7 @@ export function useIntelligentPreloading() {
   const preloadCriticalRoutes = React.useCallback(() => {
     // Préchargement des routes critiques au démarrage
     const criticalRoutes = [
-      { route: '/cart', loader: () => import('@/app/cart/page'), priority: 'high' as const },
-      { route: '/loyalty', loader: () => import('@/app/loyalty/page'), priority: 'high' as const }
+      { route: '/cart', loader: () => import('@/app/cart/page'), priority: 'high' as const }
     ];
 
     criticalRoutes.forEach(({ route, loader, priority }) => {

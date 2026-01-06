@@ -296,7 +296,7 @@ function PWAStatusIndicator() {
     return (
       <div className="fixed top-0 left-0 right-0 bg-yellow-500 text-white text-center py-2 text-sm z-50">
         <span className="font-medium">
-          📱 Mode hors ligne - Installez l'app pour une meilleure expérience
+          📱 Mode hors ligne - Installez l&apos;app pour une meilleure expérience
         </span>
       </div>
     );
