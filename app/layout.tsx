@@ -5,7 +5,7 @@ import { StoreProvider } from "@/lib/store-provider";
 
 const inter = Inter({ subsets: ["latin"] });
 
-// ✅ NOUVEAU : Configuration Viewport séparée (Next.js 14+)
+// ✅ CORRECTION : Export séparé pour le Viewport (Next.js 14+)
 export const viewport: Viewport = {
   themeColor: "#FF6B35",
   colorScheme: "light",
@@ -17,11 +17,10 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   title: "Universal Eats - Livraison de repas",
-  description: "Votre plateforme de livraison de repas favorite avec fidélité et promotions exclusives. Installez l'app pour une expérience native !",
+  description: "Votre plateforme de livraison de repas favorite avec fidélité et promotions exclusives.",
   applicationName: "Universal Eats",
   authors: [{ name: "Universal Eats Team" }],
-  keywords: ["livraison", "repas", "food delivery", "restaurant", "commande en ligne", "PWA"],
-  // ❌ themeColor, colorScheme et viewport ont été retirés d'ici
+  keywords: ["livraison", "repas", "food delivery", "restaurant", "PWA"],
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
@@ -30,20 +29,6 @@ export const metadata: Metadata = {
   },
   formatDetection: {
     telephone: false,
-  },
-  openGraph: {
-    type: "website",
-    locale: "fr_FR",
-    url: "https://universaleats.com",
-    title: "Universal Eats - Livraison de repas",
-    description: "Votre plateforme de livraison de repas favorite avec fidélité et promotions exclusives",
-    siteName: "Universal Eats",
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "Universal Eats - Livraison de repas",
-    description: "Votre plateforme de livraison de repas favorite avec fidélité et promotions exclusives",
-    creator: "@UniversalEats",
   },
   icons: {
     icon: [
@@ -65,20 +50,10 @@ export default function RootLayout({
   return (
     <html lang="fr" suppressHydrationWarning>
       <head>
-        {/* PWA Meta Tags - Ces balises legacy restent utiles pour une compatibilité maximale */}
         <meta name="mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-        <meta name="apple-mobile-web-app-title" content="Universal Eats" />
-        <meta name="msapplication-TileColor" content="#FF6B35" />
-        <meta name="msapplication-config" content="/browserconfig.xml" />
-        
         <link rel="preconnect" href="https://kdoodpxjgczqajykcqcd.supabase.co" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        
-        <link rel="dns-prefetch" href="//maps.googleapis.com" />
-        <link rel="dns-prefetch" href="//api.universaleats.com" />
       </head>
       <body className={inter.className} suppressHydrationWarning>
         <StoreProvider>

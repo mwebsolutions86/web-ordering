@@ -7,6 +7,7 @@ import { ShoppingBag, Plus, Loader2, Star, Clock, MapPin, Search, ChevronRight, 
 import Link from 'next/link'
 import ProductModal from '@/components/ProductModal'
 import { useStore } from '@/lib/store-provider'
+import OrderingModeSelector from '@/components/OrderingModeSelector';
 import PWAIntegration from '@/components/pwa/PWAIntegration'
 import AutoPreloader from '@/components/LazyRoute'
 import OptimizedImage from '@/components/OptimizedImage'
@@ -202,6 +203,11 @@ export default function MenuPage() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* ✅ SÉLECTEUR DE MODE INTELLIGENT */}
+      <div className="max-w-7xl mx-auto mb-4">
+        <OrderingModeSelector onModeChange={(mode) => console.log("Mode changé:", mode)} />
       </div>
 
       {/* STICKY NAV */}
