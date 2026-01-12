@@ -1,9 +1,19 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { StoreProvider } from "@/lib/store-provider";
 
 const inter = Inter({ subsets: ["latin"] });
+
+// ✅ NOUVEAU : Configuration Viewport séparée (Next.js 14+)
+export const viewport: Viewport = {
+  themeColor: "#FF6B35",
+  colorScheme: "light",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+};
 
 export const metadata: Metadata = {
   title: "Universal Eats - Livraison de repas",
@@ -11,14 +21,7 @@ export const metadata: Metadata = {
   applicationName: "Universal Eats",
   authors: [{ name: "Universal Eats Team" }],
   keywords: ["livraison", "repas", "food delivery", "restaurant", "commande en ligne", "PWA"],
-  themeColor: "#FF6B35",
-  colorScheme: "light",
-  viewport: {
-    width: "device-width",
-    initialScale: 1,
-    maximumScale: 1,
-    userScalable: false,
-  },
+  // ❌ themeColor, colorScheme et viewport ont été retirés d'ici
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
@@ -62,7 +65,7 @@ export default function RootLayout({
   return (
     <html lang="fr" suppressHydrationWarning>
       <head>
-        {/* PWA Meta Tags */}
+        {/* PWA Meta Tags - Ces balises legacy restent utiles pour une compatibilité maximale */}
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -70,12 +73,10 @@ export default function RootLayout({
         <meta name="msapplication-TileColor" content="#FF6B35" />
         <meta name="msapplication-config" content="/browserconfig.xml" />
         
-        {/* Preconnect pour optimiser les performances */}
         <link rel="preconnect" href="https://kdoodpxjgczqajykcqcd.supabase.co" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         
-        {/* DNS Prefetch pour les APIs externes */}
         <link rel="dns-prefetch" href="//maps.googleapis.com" />
         <link rel="dns-prefetch" href="//api.universaleats.com" />
       </head>

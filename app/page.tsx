@@ -3,14 +3,14 @@
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useCartStore } from '@/lib/store'
-import { ShoppingBag, Plus, Loader2, Star, Clock, MapPin, Search, ChevronRight, Leaf, Layers } from 'lucide-react'
+import { ShoppingBag, Plus, Loader2, Star, Clock, MapPin, Search, ChevronRight, Leaf, Layers, ChefHat } from 'lucide-react'
 import Link from 'next/link'
 import ProductModal from '@/components/ProductModal'
 import { useStore } from '@/lib/store-provider'
 import PWAIntegration from '@/components/pwa/PWAIntegration'
 import AutoPreloader from '@/components/LazyRoute'
 import OptimizedImage from '@/components/OptimizedImage'
-import { usePWAMetrics } from '@/components/pwa/PWAIntegration'
+// import { usePWAMetrics } from '@/components/pwa/PWAIntegration' // Commenté si non utilisé pour éviter crash
 
 // --- TYPES ---
 type ProductVariation = { id: string; name: string; price: number }
@@ -38,20 +38,22 @@ export default function MenuPage() {
   const { items, addItem } = useCartStore()
   
   const cartCount = items.reduce((acc, item) => acc + item.quantity, 0)
-  
-  // 🚨 CORRECTION CALCUL PRIX : On utilise unitPrice * quantity
   const cartTotal = items.reduce((acc, item) => acc + (item.unitPrice * item.quantity), 0)
 
   const categoryRefs = useRef<Record<string, HTMLElement | null>>({})
   const PRIMARY = store?.primary_color || "#000000"; 
   const SECONDARY = store?.secondary_color || "#FFFFFF";
   
-  // Métriques PWA
-  const { trackPWAUsage, trackUserEngagement } = usePWAMetrics();
-  const pageLoadTime = Date.now();
+  // Métriques PWA (Optionnel, à décommenter si le hook existe et fonctionne)
+  // const { trackPWAUsage, trackUserEngagement } = usePWAMetrics();
 
   useEffect(() => {
-    fetchData()
+    if (currentStore) {
+        fetchData();
+    }
+  }, [currentStore])
+
+  useEffect(() => {
     const handleScroll = () => {
       const scrollPosition = window.scrollY + 200;
       for (const cat of categories) {
@@ -79,13 +81,21 @@ export default function MenuPage() {
       const { data: storeData } = await supabase.from('stores').select('name, logo_url, primary_color, secondary_color, description').eq('id', currentStore.id).single();
       if (storeData) setStore(storeData);
 
+      // ✅ REQUÊTE SUPABASE AMÉLIORÉE POUR INCLURE LES COMBOS
       const { data, error } = await supabase.from('categories').select(`
           id, name, rank,
           products (
             id, name, price, description, image_url, is_available, type,
             product_variations ( id, name, price ), 
             product_ingredients ( ingredient: ingredients ( name ) ),
-            product_option_links ( group: option_groups ( id, name, min_selection, max_selection, items: option_items ( id, name, price, is_available ) ) )
+            product_option_links ( group: option_groups ( id, name, min_selection, max_selection, items: option_items ( id, name, price, is_available ) ) ),
+            combo_steps (
+                id, name, min_selection, max_selection, sort_order,
+                items: combo_step_items ( 
+                    id, extra_price, 
+                    product: products ( name ) 
+                )
+            )
           )
         `).eq('brand_id', currentStore.brand_id).eq('products.is_available', true).order('rank')
 
@@ -93,27 +103,46 @@ export default function MenuPage() {
 
       const cleanData = (data || []).filter(cat => cat.products && cat.products.length > 0).map((cat: any) => ({
             ...cat,
-            products: cat.products.map((prod: any) => ({
-                ...prod,
-                ingredients: prod.product_ingredients?.map((pi: any) => pi.ingredient?.name).filter(Boolean) || [],
-                options_config: prod.product_option_links?.map((link: any) => link.group ? ({
-                    id: link.group.id, name: link.group.name, type: link.group.max_selection > 1 ? 'multiple' : 'single', 
-                    min: link.group.min_selection, max: link.group.max_selection,
+            products: cat.products.map((prod: any) => {
+                
+                // 1. Traitement des Options Classiques
+                const regularOptions = prod.product_option_links?.map((link: any) => link.group ? ({
+                    id: link.group.id, 
+                    name: link.group.name, 
+                    type: link.group.max_selection > 1 ? 'multiple' : 'single', 
+                    min: link.group.min_selection, 
+                    max: link.group.max_selection,
                     items: (link.group.items || []).filter((i: any) => i.is_available).sort((a: any, b: any) => a.price - b.price)
-                }) : null).filter(Boolean) || [],
-                variations: (prod.product_variations || []).sort((a: any, b: any) => a.price - b.price)
-            }))
+                }) : null).filter(Boolean) || [];
+
+                // 2. Traitement des Combos (Conversion en "Options" pour le Frontend)
+                const comboOptions = prod.combo_steps?.sort((a:any, b:any) => (a.sort_order || 0) - (b.sort_order || 0)).map((step: any) => ({
+                    id: step.id,
+                    name: `👉 ${step.name}`, // Petit indicateur visuel
+                    type: step.max_selection > 1 ? 'multiple' : 'single',
+                    min: step.min_selection,
+                    max: step.max_selection,
+                    items: (step.items || []).map((item: any) => ({
+                        id: item.id,
+                        name: item.product?.name || "Produit inconnu",
+                        price: item.extra_price || 0,
+                        is_available: true // On suppose dispo pour simplifier
+                    }))
+                })) || [];
+
+                return {
+                    ...prod,
+                    ingredients: prod.product_ingredients?.map((pi: any) => pi.ingredient?.name).filter(Boolean) || [],
+                    // ✅ Fusion des Options et des Combos
+                    options_config: [...regularOptions, ...comboOptions],
+                    variations: (prod.product_variations || []).sort((a: any, b: any) => a.price - b.price)
+                };
+            })
         }))
       setCategories(cleanData)
       if(cleanData.length > 0) setActiveCategory(cleanData[0].id)
-    } catch (error) { console.error(error) } finally { setLoading(false) }
+    } catch (error) { console.error("Erreur Fetch:", error) } finally { setLoading(false) }
   }
-
-  useEffect(() => {
-    if (currentStore) {
-      fetchData();
-    }
-  }, [currentStore])
 
   const scrollToCategory = (id: string) => {
     setActiveCategory(id);
@@ -125,30 +154,18 @@ export default function MenuPage() {
     }
   };
 
- // ✅ LOGIQUE D'AJOUT AU PANIER CORRIGÉE
- const handleAddToCart = (itemPayload: any) => {
-      // DEBUG : Voir ce que le Modal envoie
-      console.log("📦 Payload reçu du Modal:", itemPayload);
-
-      // CRUCIAL : On construit l'objet complet pour le Store
+  const handleAddToCart = (itemPayload: any) => {
       const cartItem = {
           cartId: crypto.randomUUID(),
           id: itemPayload.id,
           name: itemPayload.name,
           image_url: itemPayload.image_url,
-          
-          // 1. PRIX : On force l'utilisation du prix unitaire CALCULÉ (celui qui inclut les suppléments)
           unitPrice: itemPayload.unitPrice, 
           quantity: itemPayload.quantity,
-          
-          // 2. OPTIONS : On s'assure qu'elles sont bien passées
           selectedVariation: itemPayload.selectedVariation || null,
-          selectedOptions: itemPayload.selectedOptions || {}, // Si undefined, on met un objet vide
-          removedIngredients: itemPayload.removedIngredients || [] // Si undefined, on met un tableau vide
+          selectedOptions: itemPayload.selectedOptions || {},
+          removedIngredients: itemPayload.removedIngredients || []
       };
-
-      console.log("🚀 Envoi au Store:", cartItem);
-      
       addItem(cartItem);
       setIsModalOpen(false);
   };
@@ -158,7 +175,7 @@ export default function MenuPage() {
   return (
     <div className="min-h-screen bg-gray-50 font-sans pb-32">
       
-      {/* HERO & SEARCH (Identique) */}
+      {/* HERO & SEARCH */}
       <div className="relative h-[300px] md:h-[400px] w-full bg-gray-900 overflow-hidden">
         <img src="https://images.unsplash.com/photo-1504674900247-0877df9cc836?q=80&w=2070&auto=format&fit=crop" alt="Cover" className="w-full h-full object-cover opacity-50"/>
         <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
@@ -225,7 +242,9 @@ export default function MenuPage() {
                         <div className="mt-5 pt-4 border-t border-gray-50 flex items-center justify-between">
                             <div className="flex gap-2">
                                 {product.ingredients && product.ingredients.length > 0 && <span className="bg-green-50 text-green-600 p-1.5 rounded-full"><Leaf size={14}/></span>}
-                                {(product.options_config?.length > 0 || product.variations?.length > 0) && <span className="bg-blue-50 text-blue-600 p-1.5 rounded-full"><Layers size={14}/></span>}
+                                {/* Indication visuelle si c'est un menu Combo */}
+                                {product.type === 'combo' && <span className="bg-indigo-50 text-indigo-600 p-1.5 rounded-full"><ChefHat size={14}/></span>}
+                                {product.options_config?.length > 0 && <span className="bg-blue-50 text-blue-600 p-1.5 rounded-full"><Layers size={14}/></span>}
                             </div>
                             <div style={{ backgroundColor: PRIMARY, color: SECONDARY }} className="w-10 h-10 rounded-full flex items-center justify-center shadow-lg transform transition-transform group-hover:rotate-90"><Plus size={20} /></div>
                         </div>
@@ -238,7 +257,7 @@ export default function MenuPage() {
         })}
       </main>
 
-      {/* --- FLOATING CART (Z-Index Fixé à 100) --- */}
+      {/* --- FLOATING CART --- */}
       {cartCount > 0 && (
         <div className="fixed bottom-6 right-6 z-[100] animate-in slide-in-from-bottom-4 fade-in duration-500">
             <Link 
@@ -258,13 +277,12 @@ export default function MenuPage() {
         </div>
       )}
 
-      {/* ✅ LA MODALE PRODUIT CONNECTÉE AVEC COULEURS */}
+      {/* MODALE */}
       <ProductModal 
         isOpen={isModalOpen} 
         onClose={() => setIsModalOpen(false)} 
         product={selectedProduct} 
         onAddToCart={handleAddToCart}
-        // 👇 AJOUTEZ CETTE LIGNE
         brandColors={{ primary: PRIMARY, secondary: SECONDARY }}
       />
     </div>
