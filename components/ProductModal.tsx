@@ -1,10 +1,22 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { X, Minus, Plus, Check, Ban } from 'lucide-react';
-import Image from 'next/image';
+import { useEffect, useState, useMemo } from 'react';
+import { X, Minus, Plus, Check, Ban, AlertCircle } from 'lucide-react';
+import { cn } from '@/lib/utils';
+// 👇 IMPORT DYNAMIQUE POUR ÉVITER LE CRASH SSR (Important !)
+import dynamic from 'next/dynamic';
 
-// --- TYPES ---
+// On charge le visualiseur 3D uniquement côté client
+const FoodViewer3D = dynamic(() => import('@/components/experience/FoodViewer3D'), {
+  ssr: false,
+  loading: () => (
+    <div className="h-full w-full bg-gray-100 flex items-center justify-center animate-pulse">
+      <span className="text-xs text-gray-400 font-medium">Chargement visuel...</span>
+    </div>
+  ),
+});
+
+// --- TYPES (Identiques à votre logique métier) ---
 interface Variation {
   id: string;
   name: string;
@@ -34,7 +46,7 @@ interface Product {
   image_url: string | null;
   type: 'simple' | 'variable' | 'combo';
   variations?: Variation[];
-  options_config?: OptionGroup[]; 
+  options_config?: any; // On garde any pour la flexibilité du JSONB, ou OptionGroup[] si typé
   ingredients?: string[];
 }
 
@@ -43,28 +55,29 @@ interface ProductModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAddToCart: (item: any) => void;
-  // ✅ NOUVEAU : On accepte les couleurs du brand
   brandColors?: { primary: string; secondary: string };
 }
 
 export default function ProductModal({ product, isOpen, onClose, onAddToCart, brandColors }: ProductModalProps) {
+  // --- STATE ---
   const [quantity, setQuantity] = useState(1);
   const [selectedVariation, setSelectedVariation] = useState<Variation | null>(null);
   const [selectedOptions, setSelectedOptions] = useState<Record<string, OptionItem[]>>({});
   const [removedIngredients, setRemovedIngredients] = useState<string[]>([]);
-  const [totalPrice, setTotalPrice] = useState(0);
+  const [isClosing, setIsClosing] = useState(false);
 
-  // Valeurs par défaut si non fournies
-  const primary = brandColors?.primary || '#000000';
-  const secondary = brandColors?.secondary || '#FFFFFF';
+  // --- BRANDING ---
+  const primaryColor = brandColors?.primary || '#000000';
+  const secondaryColor = brandColors?.secondary || '#FFFFFF';
 
-  // --- INIT ---
+  // --- INIT & RESET ---
   useEffect(() => {
     if (isOpen && product) {
       setQuantity(1);
       setSelectedOptions({});
       setRemovedIngredients([]);
-      
+      setIsClosing(false);
+
       if (product.variations && product.variations.length > 0) {
         const sorted = [...product.variations].sort((a, b) => a.price - b.price);
         setSelectedVariation(sorted[0]);
@@ -74,72 +87,83 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, br
     }
   }, [isOpen, product]);
 
-  // --- CALCUL PRIX ---
-  useEffect(() => {
-    if (!product) return;
+  // --- VALIDATION EN TEMPS RÉEL (Logique métier conservée) ---
+  const validationState = useMemo(() => {
+    // Cast sécurisé des options
+    const optionsGroups = (product?.options_config as OptionGroup[]) || [];
+    if (!optionsGroups.length) return { isValid: true, missingGroups: [] };
 
-    let base = product.price;
-    if (selectedVariation) {
-      base = selectedVariation.price;
-    }
+    const missingGroups: string[] = [];
+    let isValid = true;
 
-    let optionsTotal = 0;
-    Object.values(selectedOptions).forEach(items => {
-      items.forEach(item => {
-        optionsTotal += item.price;
-      });
+    optionsGroups.forEach(group => {
+      const currentCount = selectedOptions[group.id]?.length || 0;
+      if (currentCount < group.min) {
+        isValid = false;
+        missingGroups.push(group.id);
+      }
     });
 
-    setTotalPrice((base + optionsTotal) * quantity);
+    return { isValid, missingGroups };
+  }, [product, selectedOptions]);
+
+  // --- CALCUL PRIX TOTAL ---
+  const totalPrice = useMemo(() => {
+    if (!product) return 0;
+    
+    let base = selectedVariation ? selectedVariation.price : product.price;
+    
+    let optionsTotal = 0;
+    Object.values(selectedOptions).flat().forEach(opt => {
+      optionsTotal += opt.price;
+    });
+
+    return (base + optionsTotal) * quantity;
   }, [product, selectedVariation, selectedOptions, quantity]);
 
   // --- HANDLERS ---
-  const handleRadioSelect = (group: OptionGroup, item: OptionItem) => {
-    setSelectedOptions(prev => ({ ...prev, [group.id]: [item] }));
+  const handleClose = () => {
+    setIsClosing(true);
+    setTimeout(onClose, 300);
   };
 
-  const incrementOption = (group: OptionGroup, item: OptionItem) => {
-    setSelectedOptions(prev => {
-      const currentItems = prev[group.id] || [];
-      if (currentItems.length < group.max) {
-        return { ...prev, [group.id]: [...currentItems, item] };
+  const toggleIngredient = (ingredient: string) => {
+    setRemovedIngredients(prev => {
+      if (prev.includes(ingredient)) {
+        return prev.filter(i => i !== ingredient);
+      } else {
+        return [...prev, ingredient];
       }
-      return prev; 
     });
   };
 
-  const decrementOption = (group: OptionGroup, item: OptionItem) => {
+  const handleOptionSelect = (group: OptionGroup, item: OptionItem, method: 'add' | 'remove' | 'set') => {
     setSelectedOptions(prev => {
-      const currentItems = prev[group.id] || [];
-      const indexToRemove = currentItems.findIndex(i => i.id === item.id);
-      if (indexToRemove !== -1) {
-        const newItems = [...currentItems];
-        newItems.splice(indexToRemove, 1);
-        return { ...prev, [group.id]: newItems };
+      const currentSelection = prev[group.id] || [];
+      
+      if (group.max === 1) {
+        return { ...prev, [group.id]: [item] };
       }
+
+      if (method === 'add') {
+        if (currentSelection.length >= group.max) return prev;
+        return { ...prev, [group.id]: [...currentSelection, item] };
+      }
+
+      if (method === 'remove') {
+        const idx = currentSelection.findIndex(i => i.id === item.id);
+        if (idx === -1) return prev;
+        const newSelection = [...currentSelection];
+        newSelection.splice(idx, 1);
+        return { ...prev, [group.id]: newSelection };
+      }
+
       return prev;
     });
   };
 
-  const toggleIngredientRemove = (ingredient: string) => {
-    setRemovedIngredients(prev => {
-        if (prev.includes(ingredient)) return prev.filter(i => i !== ingredient);
-        else return [...prev, ingredient];
-    });
-  };
-
   const handleAddToCartClick = () => {
-    if (!product) return;
-
-    if (product.options_config) {
-        for (const group of product.options_config) {
-            const currentCount = selectedOptions[group.id]?.length || 0;
-            if (currentCount < group.min) {
-                alert(`⚠️ "${group.name}" : Veuillez en choisir au moins ${group.min}.`);
-                return;
-            }
-        }
-    }
+    if (!product || !validationState.isValid) return;
 
     onAddToCart({
       id: product.id,
@@ -149,60 +173,108 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, br
       selectedVariation,
       selectedOptions,
       removedIngredients,
-      finalPrice: totalPrice, 
-      unitPrice: totalPrice / quantity
+      totalPrice: totalPrice,
+      unitPrice: totalPrice / quantity,
+      instructions: removedIngredients.length > 0 ? `Sans: ${removedIngredients.join(', ')}` : ''
     });
-    onClose();
+    handleClose();
   };
 
   if (!isOpen || !product) return null;
 
-  return (
-    <div className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center pointer-events-none">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm pointer-events-auto transition-opacity" onClick={onClose} />
+  // 🧠 Logique Futuriste : Extraction du modèle 3D depuis options_config ou un champ dédié
+  // On suppose ici que options_config peut contenir une clé spéciale "meta_3d" ou on utilise une convention
+  // Pour l'instant, on cherche dans options_config si c'est un tableau, sinon on regarde si c'est un objet JSON
+  // Note: Dans votre schéma DB, options_config est JSONB. Adaptez selon votre structure réelle.
+  const model3DUrl = (product as any).model_3d_url || null; // Si vous ajoutez le champ un jour
+  // OU : const model3DUrl = "https://mon-bucket.com/burger.glb"; // Pour tester en dur
 
-      <div className="bg-white w-full sm:max-w-lg sm:rounded-3xl rounded-t-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] pointer-events-auto animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-300 relative">
+  return (
+    <div className={cn(
+      "fixed inset-0 z-[9999] flex items-end sm:items-center justify-center pointer-events-none",
+      isClosing ? "opacity-0 transition-opacity duration-300" : "opacity-100"
+    )}>
+      <div 
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm pointer-events-auto transition-opacity" 
+        onClick={handleClose} 
+      />
+
+      <div className={cn(
+        "bg-white w-full sm:max-w-lg sm:rounded-3xl rounded-t-3xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] pointer-events-auto relative transform transition-all duration-300",
+        isClosing ? "translate-y-full sm:scale-95 sm:translate-y-10" : "translate-y-0 sm:scale-100"
+      )}>
         
-        {/* HEADER IMAGE */}
-        <div className="relative h-56 w-full bg-gray-100 shrink-0 z-0">
-            {product.image_url ? (
-                <Image src={product.image_url} fill className="object-cover" alt={product.name} sizes="(max-width: 768px) 100vw, 600px"/>
-            ) : (
-                <div className="absolute inset-0 flex items-center justify-center text-gray-300 text-4xl">🍔</div>
-            )}
-            <button onClick={onClose} className="absolute top-4 right-4 bg-white/90 p-2 rounded-full shadow-md hover:scale-110 transition active:scale-95 z-50 text-black">
-                <X size={20}/>
+        {/* 🔥 HEADER HYBRIDE : 3D avec Fallback Image géré par FoodViewer3D */}
+        <div className="relative h-72 w-full bg-gray-100 shrink-0">
+            <FoodViewer3D 
+                modelUrl={model3DUrl} 
+                imageUrl={product.image_url} 
+                alt={product.name}
+                className="h-full w-full rounded-none" // On écrase le style par défaut pour coller au header
+            />
+            
+            {/* Bouton Fermer (Overlay) */}
+            <button 
+              onClick={handleClose} 
+              className="absolute top-4 right-4 bg-white/80 backdrop-blur text-black p-2 rounded-full shadow-lg hover:scale-110 active:scale-95 transition z-30"
+            >
+                <X size={20} />
             </button>
         </div>
 
-        {/* CONTENU */}
-        <div className="flex-1 overflow-y-auto p-6 custom-scrollbar space-y-8 bg-white relative z-10">
+        {/* 2. CONTENU SCROLLABLE (Logique Métier Intacte) */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-8 bg-white custom-scrollbar">
+            
+            {/* Info Produit */}
             <div>
-                <h2 className="text-2xl font-black text-gray-900 mb-2">{product.name}</h2>
-                <p className="text-gray-500 text-sm leading-relaxed">{product.description}</p>
+                <div className="flex justify-between items-start mb-2">
+                    <h2 className="text-2xl font-black text-gray-900 leading-tight">{product.name}</h2>
+                    {!product.variations?.length && (
+                      <span className="text-lg font-bold text-gray-900 bg-gray-100 px-3 py-1 rounded-lg">
+                        {product.price} DH
+                      </span>
+                    )}
+                </div>
+                {product.description && (
+                  <p className="text-gray-500 text-sm leading-relaxed">{product.description}</p>
+                )}
             </div>
 
-            {/* VARIANTES (TAILLES) */}
+            {/* A. VARIANTES */}
             {product.variations && product.variations.length > 0 && (
                 <div className="space-y-3">
-                    <h3 className="font-bold text-xs uppercase text-gray-400 tracking-wider">Taille</h3>
-                    <div className="grid grid-cols-2 gap-3">
+                    <h3 className="text-sm font-bold uppercase text-gray-400 tracking-wider">Choisissez votre taille</h3>
+                    <div className="space-y-2">
                         {product.variations.map((v) => {
                             const isSelected = selectedVariation?.id === v.id;
                             return (
                                 <button
                                     key={v.id}
                                     onClick={() => setSelectedVariation(v)}
-                                    // ✅ COULEUR DYNAMIQUE
-                                    style={isSelected ? { backgroundColor: primary, color: secondary, borderColor: primary } : {}}
-                                    className={`p-4 rounded-xl border text-left transition-all flex justify-between items-center ${
-                                        isSelected 
-                                        ? 'shadow-lg ring-2 ring-opacity-20' 
-                                        : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
-                                    }`}
+                                    className={cn(
+                                      "w-full p-4 rounded-xl border flex justify-between items-center transition-all duration-200 group",
+                                      isSelected ? "border-transparent ring-2 ring-offset-1 bg-gray-50/50" : "border-gray-200 hover:border-gray-300 bg-white"
+                                    )}
+                                    style={isSelected ? { 
+                                      boxShadow: `0 0 0 2px ${primaryColor} inset`,
+                                      backgroundColor: `${primaryColor}08`
+                                    } : {}}
                                 >
-                                    <span className="font-bold text-sm">{v.name}</span>
-                                    <span className="text-xs font-medium">{v.price} DH</span>
+                                    <div className="flex items-center gap-3">
+                                      <div 
+                                        className={cn(
+                                          "w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors",
+                                          isSelected ? "border-transparent" : "border-gray-300"
+                                        )}
+                                        style={isSelected ? { backgroundColor: primaryColor } : {}}
+                                      >
+                                        {isSelected && <div className="w-2 h-2 bg-white rounded-full" />}
+                                      </div>
+                                      <span className={cn("font-semibold text-base", isSelected ? "text-gray-900" : "text-gray-600")}>
+                                        {v.name}
+                                      </span>
+                                    </div>
+                                    <span className="font-bold text-gray-900">{v.price} DH</span>
                                 </button>
                             );
                         })}
@@ -210,16 +282,28 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, br
                 </div>
             )}
 
-            {/* INGRÉDIENTS */}
+            {/* B. INGRÉDIENTS */}
             {product.ingredients && product.ingredients.length > 0 && (
                 <div className="space-y-3">
-                    <h3 className="font-bold text-xs uppercase text-gray-400 tracking-wider">Ingrédients (Tap pour retirer)</h3>
+                    <h3 className="text-sm font-bold uppercase text-gray-400 tracking-wider flex justify-between">
+                      Ingrédients
+                      <span className="text-[10px] normal-case bg-gray-100 px-2 py-0.5 rounded text-gray-500">Tap pour retirer</span>
+                    </h3>
                     <div className="flex flex-wrap gap-2">
                         {product.ingredients.map((ing) => {
                             const isRemoved = removedIngredients.includes(ing);
                             return (
-                                <button key={ing} onClick={() => toggleIngredientRemove(ing)} className={`px-3 py-2 rounded-lg text-sm font-medium border transition-all flex items-center gap-2 ${isRemoved ? 'bg-red-50 border-red-200 text-red-600 line-through decoration-red-400 opacity-80' : 'bg-white border-gray-200 text-gray-700 hover:border-gray-400'}`}>
-                                    {isRemoved && <Ban size={12}/>}
+                                <button 
+                                  key={ing} 
+                                  onClick={() => toggleIngredient(ing)} 
+                                  className={cn(
+                                    "px-3 py-2 rounded-lg text-sm font-medium border transition-all flex items-center gap-2",
+                                    isRemoved 
+                                      ? "bg-red-50 border-red-200 text-red-500 line-through decoration-red-400/50 opacity-70" 
+                                      : "bg-white border-gray-200 text-gray-700 hover:border-gray-300"
+                                  )}
+                                >
+                                    {isRemoved ? <Ban size={14} /> : <Check size={14} className="text-green-500" />}
                                     {ing}
                                 </button>
                             );
@@ -228,101 +312,105 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, br
                 </div>
             )}
 
-            {/* OPTIONS */}
-            {product.options_config && product.options_config.length > 0 && (
-                <div className="space-y-8 pt-4 border-t border-gray-100">
-                    {product.options_config.map((group) => {
-                        const currentSelected = selectedOptions[group.id] || [];
-                        const currentCount = currentSelected.length;
+            {/* C. OPTIONS */}
+            {product.options_config && Array.isArray(product.options_config) && product.options_config.length > 0 && (
+                <div className="space-y-8 pt-6 border-t border-gray-100">
+                    {(product.options_config as OptionGroup[]).map((group) => {
+                        const currentSelection = selectedOptions[group.id] || [];
+                        const currentCount = currentSelection.length;
                         const isMultiple = group.max > 1;
-                        const isLimitReached = isMultiple && currentCount >= group.max;
+                        const isSatisfied = currentCount >= group.min;
+                        const isMissing = !isSatisfied && validationState.missingGroups.includes(group.id);
 
                         return (
-                            <div key={group.id} className="space-y-3">
-                                <div className="flex justify-between items-end border-b border-gray-100 pb-2">
-                                    <h3 className="font-bold text-base text-gray-900 flex items-center gap-2">
-                                        {group.name}
-                                        {isMultiple && (
-                                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-500`}>
-                                                {currentCount} / {group.max}
-                                            </span>
-                                        )}
-                                    </h3>
-                                    <div className="text-[10px] uppercase font-bold text-gray-500 bg-gray-100 px-2 py-1 rounded">
-                                        {group.min > 0 ? <span className="text-orange-600">Obligatoire</span> : <span>Optionnel</span>}
+                            <div key={group.id} className={cn("space-y-3 rounded-xl p-1 transition-colors", isMissing && "bg-red-50/50 -mx-1 px-1")}>
+                                <div className="flex justify-between items-center">
+                                    <div className="flex flex-col">
+                                      <h3 className={cn("font-bold text-base flex items-center gap-2", isMissing ? "text-red-600" : "text-gray-900")}>
+                                          {group.name}
+                                          {isMissing && <AlertCircle size={14} className="text-red-500 animate-pulse"/>}
+                                      </h3>
+                                      <span className="text-xs text-gray-500">
+                                        {isMultiple ? `Max ${group.max} choix` : "1 choix"}
+                                      </span>
+                                    </div>
+                                    <div className={cn(
+                                      "text-[10px] uppercase font-bold px-2 py-1 rounded border",
+                                      group.min > 0 
+                                        ? (isSatisfied ? "bg-green-50 text-green-700 border-green-200" : "bg-orange-50 text-orange-700 border-orange-200")
+                                        : "bg-gray-100 text-gray-500 border-transparent"
+                                    )}>
+                                        {group.min > 0 ? (isSatisfied ? "OK" : `Requis`) : "Optionnel"}
                                     </div>
                                 </div>
                                 
-                                <div className="space-y-2">
+                                <div className="grid gap-2">
                                     {group.items.map((item) => {
-                                        const qtyThisItem = currentSelected.filter(i => i.id === item.id).length;
+                                        const qtyThisItem = currentSelection.filter(i => i.id === item.id).length;
                                         const isSelected = qtyThisItem > 0;
+                                        const isMaxReached = currentCount >= group.max;
 
-                                        // --- MODE MULTIPLE ---
-                                        if (isMultiple) {
-                                            return (
-                                                <div key={item.id} className={`w-full p-3 rounded-xl border flex items-center justify-between transition-all ${isSelected ? 'border-gray-300 bg-gray-50' : 'border-gray-100 bg-white'}`}>
-                                                    <div className="flex items-center gap-3">
-                                                        <span className="font-medium text-sm text-gray-900">{item.name}</span>
-                                                        {item.price > 0 && <span className="text-xs font-bold text-gray-500">+{item.price} DH</span>}
+                                        // LOGIQUE AFFICHAGE (Radio vs Checkbox)
+                                        if (group.max === 1) {
+                                          return (
+                                            <button
+                                              key={item.id}
+                                              onClick={() => handleOptionSelect(group, item, 'set')}
+                                              className={cn(
+                                                "w-full p-3 rounded-lg border flex items-center justify-between transition-all active:scale-[0.99]",
+                                                isSelected ? "bg-white ring-1 ring-offset-0" : "bg-white border-gray-100 hover:bg-gray-50"
+                                              )}
+                                              style={isSelected ? { borderColor: primaryColor, boxShadow: `0 0 0 1px ${primaryColor} inset` } : {}}
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    <div 
+                                                      className={cn("w-4 h-4 rounded-full border flex items-center justify-center", isSelected ? "border-transparent" : "border-gray-300")}
+                                                      style={isSelected ? { backgroundColor: primaryColor } : {}}
+                                                    >
+                                                      {isSelected && <div className="w-1.5 h-1.5 bg-white rounded-full" />}
                                                     </div>
-                                                    
-                                                    <div className="flex items-center gap-3 bg-white rounded-lg border border-gray-200 p-1 shadow-sm">
-                                                        {qtyThisItem > 0 ? (
-                                                            <>
-                                                                <button onClick={() => decrementOption(group, item)} className="w-7 h-7 flex items-center justify-center bg-gray-100 rounded hover:bg-gray-200 transition">
-                                                                    <Minus size={14}/>
-                                                                </button>
-                                                                <span className="font-bold text-sm w-4 text-center">{qtyThisItem}</span>
-                                                            </>
-                                                        ) : null}
-                                                        
-                                                        <button 
-                                                            onClick={() => incrementOption(group, item)}
-                                                            disabled={isLimitReached}
-                                                            // ✅ COULEUR DYNAMIQUE POUR LE BOUTON +
-                                                            style={!isLimitReached ? { backgroundColor: primary, color: secondary } : {}}
-                                                            className={`w-7 h-7 flex items-center justify-center rounded transition ${isLimitReached ? 'bg-gray-50 text-gray-300 cursor-not-allowed' : ''}`}
-                                                        >
-                                                            <Plus size={14}/>
-                                                        </button>
-                                                    </div>
+                                                    <span className="text-sm font-medium text-gray-900">{item.name}</span>
                                                 </div>
-                                            );
-                                        } 
-                                        
-                                        // --- MODE RADIO ---
-                                        else {
-                                            return (
-                                                <button
-                                                    key={item.id}
-                                                    onClick={() => handleRadioSelect(group, item)}
-                                                    // ✅ BORDURE ET FOND DYNAMIQUE SI SÉLECTIONNÉ
-                                                    style={isSelected ? { borderColor: primary, backgroundColor: `${primary}15` } : {}}
-                                                    className={`w-full p-3 rounded-xl border flex items-center justify-between transition-all active:scale-[0.98] ${
-                                                        isSelected ? '' : 'border-gray-100 bg-white hover:border-gray-300'
-                                                    }`}
-                                                >
-                                                    <div className="flex items-center gap-3">
-                                                        {/* ROND RADIO DYNAMIQUE */}
-                                                        <div 
-                                                            style={isSelected ? { backgroundColor: primary, borderColor: primary } : {}}
-                                                            className={`w-5 h-5 rounded-full flex items-center justify-center border transition-colors ${
-                                                                isSelected ? '' : 'border-gray-300 bg-white'
-                                                            }`}
-                                                        >
-                                                            {isSelected && <Check size={12} className="text-white"/>}
-                                                        </div>
-                                                        
-                                                        {/* TEXTE COLORÉ SI SÉLECTIONNÉ */}
-                                                        <span style={isSelected ? { color: primary } : {}} className="font-medium text-sm text-gray-900">
-                                                            {item.name}
-                                                        </span>
-                                                    </div>
-                                                    {item.price > 0 && <span className="text-xs font-bold text-gray-600">+{item.price} DH</span>}
-                                                </button>
-                                            );
+                                                {item.price > 0 && <span className="text-xs font-semibold text-gray-500">+{item.price} DH</span>}
+                                            </button>
+                                          );
                                         }
+
+                                        return (
+                                            <div key={item.id} className={cn(
+                                              "w-full p-3 rounded-lg border flex items-center justify-between transition-all",
+                                              isSelected ? "border-gray-300 bg-gray-50" : "border-gray-100 bg-white"
+                                            )}>
+                                                <div className="flex flex-col">
+                                                    <span className="text-sm font-medium text-gray-900">{item.name}</span>
+                                                    {item.price > 0 && <span className="text-xs text-gray-500">+{item.price} DH</span>}
+                                                </div>
+                                                <div className="flex items-center gap-3">
+                                                    {qtyThisItem > 0 && (
+                                                      <>
+                                                        <button 
+                                                          onClick={() => handleOptionSelect(group, item, 'remove')}
+                                                          className="w-8 h-8 flex items-center justify-center bg-white border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-100"
+                                                        >
+                                                          <Minus size={14}/>
+                                                        </button>
+                                                        <span className="font-bold text-sm w-4 text-center">{qtyThisItem}</span>
+                                                      </>
+                                                    )}
+                                                    <button 
+                                                        onClick={() => handleOptionSelect(group, item, 'add')}
+                                                        disabled={isMaxReached}
+                                                        className={cn(
+                                                          "w-8 h-8 flex items-center justify-center rounded-lg text-white shadow-sm transition",
+                                                          isMaxReached ? "bg-gray-200 cursor-not-allowed opacity-50" : "hover:opacity-90"
+                                                        )}
+                                                        style={!isMaxReached ? { backgroundColor: primaryColor } : {}}
+                                                    >
+                                                        <Plus size={14}/>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        );
                                     })}
                                 </div>
                             </div>
@@ -332,23 +420,43 @@ export default function ProductModal({ product, isOpen, onClose, onAddToCart, br
             )}
         </div>
 
-        {/* FOOTER */}
-        <div className="p-6 border-t border-gray-100 bg-white shrink-0 safe-area-bottom z-20 shadow-[0_-5px_20px_rgba(0,0,0,0.05)]">
-            <div className="flex items-center gap-4">
-                <div className="flex items-center bg-gray-100 rounded-full p-1">
-                    <button onClick={() => setQuantity(Math.max(1, quantity - 1))} className="w-10 h-10 flex items-center justify-center bg-white rounded-full shadow-sm hover:scale-105 active:scale-95 transition disabled:opacity-50" disabled={quantity <= 1}><Minus size={16}/></button>
-                    <span className="font-black text-lg w-10 text-center tabular-nums">{quantity}</span>
-                    <button onClick={() => setQuantity(quantity + 1)} className="w-10 h-10 flex items-center justify-center bg-white rounded-full shadow-sm hover:scale-105 active:scale-95 transition"><Plus size={16}/></button>
+        {/* 3. FOOTER ACTIONS */}
+        <div className="p-4 sm:p-6 border-t border-gray-100 bg-white shrink-0 safe-area-bottom shadow-[0_-10px_40px_rgba(0,0,0,0.05)] z-40 relative">
+            <div className="flex gap-4 h-14">
+                <div className="flex items-center bg-gray-100 rounded-2xl px-2 shrink-0">
+                    <button 
+                      onClick={() => setQuantity(Math.max(1, quantity - 1))} 
+                      disabled={quantity <= 1}
+                      className="w-10 h-10 flex items-center justify-center bg-white rounded-xl shadow-sm hover:scale-105 active:scale-95 transition disabled:opacity-50"
+                    >
+                      <Minus size={18}/>
+                    </button>
+                    <span className="font-bold text-xl w-12 text-center tabular-nums text-gray-900">{quantity}</span>
+                    <button 
+                      onClick={() => setQuantity(quantity + 1)} 
+                      className="w-10 h-10 flex items-center justify-center bg-white rounded-xl shadow-sm hover:scale-105 active:scale-95 transition"
+                    >
+                      <Plus size={18}/>
+                    </button>
                 </div>
                 
-                {/* ✅ BOUTON AJOUTER DYNAMIQUE */}
                 <button 
                     onClick={handleAddToCartClick}
-                    style={{ backgroundColor: primary, color: secondary }}
-                    className="flex-1 py-4 rounded-full font-bold text-lg hover:opacity-90 active:scale-[0.98] transition shadow-xl flex justify-between px-8 items-center"
+                    disabled={!validationState.isValid}
+                    style={{ 
+                      backgroundColor: validationState.isValid ? primaryColor : '#E5E7EB', 
+                      color: validationState.isValid ? secondaryColor : '#9CA3AF'
+                    }}
+                    className={cn(
+                      "flex-1 rounded-2xl font-bold text-lg transition-all duration-300 flex justify-between px-6 items-center shadow-lg",
+                      validationState.isValid ? "hover:shadow-xl hover:-translate-y-0.5 active:scale-[0.98]" : "cursor-not-allowed shadow-none"
+                    )}
                 >
-                    <span>Ajouter</span>
-                    <span className="tabular-nums">{totalPrice.toFixed(2)} DH</span>
+                    <span className="flex flex-col items-start leading-none gap-1">
+                      <span>{validationState.isValid ? "Ajouter" : "Incomplet"}</span>
+                      {!validationState.isValid && <span className="text-[10px] opacity-80 font-normal">Options requises</span>}
+                    </span>
+                    <span className="tabular-nums opacity-90">{totalPrice.toFixed(2)} DH</span>
                 </button>
             </div>
         </div>

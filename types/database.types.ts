@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "13.0.5"
+    PostgrestVersion: "14.1"
   }
   public: {
     Tables: {
@@ -333,7 +333,7 @@ export type Database = {
           store_id: string | null
         }
         Insert: {
-          area: unknown
+          area?: unknown
           created_at?: string | null
           fee?: number | null
           id?: string
@@ -513,6 +513,7 @@ export type Database = {
           author: string | null
           context: string | null
           id: string
+          is_active: boolean | null
           key: string
           language: string
           market: string | null
@@ -523,6 +524,7 @@ export type Database = {
           author?: string | null
           context?: string | null
           id?: string
+          is_active?: boolean | null
           key: string
           language: string
           market?: string | null
@@ -533,6 +535,7 @@ export type Database = {
           author?: string | null
           context?: string | null
           id?: string
+          is_active?: boolean | null
           key?: string
           language?: string
           market?: string | null
@@ -868,6 +871,13 @@ export type Database = {
             referencedRelation: "orders"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "order_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
         ]
       }
       orders: {
@@ -880,6 +890,7 @@ export type Database = {
           created_at: string | null
           customer_name: string | null
           customer_phone: string | null
+          delivered_at: string | null
           delivery_address: string | null
           delivery_fee_applied: number | null
           discount_amount: number | null
@@ -894,6 +905,8 @@ export type Database = {
           payment_method: string | null
           payment_status: Database["public"]["Enums"]["payment_status"] | null
           pos_session_id: string | null
+          preparation_end_at: string | null
+          preparation_start_at: string | null
           status: Database["public"]["Enums"]["order_status"] | null
           store_id: string
           total_amount: number
@@ -908,6 +921,7 @@ export type Database = {
           created_at?: string | null
           customer_name?: string | null
           customer_phone?: string | null
+          delivered_at?: string | null
           delivery_address?: string | null
           delivery_fee_applied?: number | null
           discount_amount?: number | null
@@ -922,6 +936,8 @@ export type Database = {
           payment_method?: string | null
           payment_status?: Database["public"]["Enums"]["payment_status"] | null
           pos_session_id?: string | null
+          preparation_end_at?: string | null
+          preparation_start_at?: string | null
           status?: Database["public"]["Enums"]["order_status"] | null
           store_id: string
           total_amount: number
@@ -936,6 +952,7 @@ export type Database = {
           created_at?: string | null
           customer_name?: string | null
           customer_phone?: string | null
+          delivered_at?: string | null
           delivery_address?: string | null
           delivery_fee_applied?: number | null
           discount_amount?: number | null
@@ -950,12 +967,21 @@ export type Database = {
           payment_method?: string | null
           payment_status?: Database["public"]["Enums"]["payment_status"] | null
           pos_session_id?: string | null
+          preparation_end_at?: string | null
+          preparation_start_at?: string | null
           status?: Database["public"]["Enums"]["order_status"] | null
           store_id?: string
           total_amount?: number
           user_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "orders_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "orders_pos_session_id_fkey"
             columns: ["pos_session_id"]
@@ -1712,44 +1738,6 @@ export type Database = {
             }
             Returns: string
           }
-      check_delivery_availability: {
-        Args: { p_lat: number; p_lng: number; p_store_id: string }
-        Returns: {
-          delivery_fee: number
-          is_available: boolean
-        }[]
-      }
-      create_order_secure:
-        | {
-            Args: {
-              p_customer_name: string
-              p_customer_phone: string
-              p_delivery_address: string
-              p_items: Json
-              p_notes?: string
-              p_order_type: string
-              p_store_id: string
-            }
-            Returns: Json
-          }
-        | {
-            Args: {
-              p_delivery_address: string
-              p_items: Json
-              p_location?: unknown
-              p_store_id: string
-            }
-            Returns: string
-          }
-        | {
-            Args: {
-              p_delivery_address: string
-              p_items: Json
-              p_location: unknown
-              p_store_id: string
-            }
-            Returns: Json
-          }
       disablelongtransactions: { Args: never; Returns: string }
       dropgeometrycolumn:
         | {
@@ -1881,53 +1869,7 @@ export type Database = {
         Returns: boolean
       }
       geomfromewkt: { Args: { "": string }; Returns: unknown }
-      get_my_profile_safe: {
-        Args: never
-        Returns: {
-          brand_id: string
-          id: string
-          role: string
-          store_id: string
-        }[]
-      }
-      get_pos_live_orders: { Args: { p_store_id: string }; Returns: Json }
-      get_pos_menu_sync: { Args: { p_brand_id: string }; Returns: Json }
-      get_pos_staff_sync: {
-        Args: { p_store_id: string }
-        Returns: {
-          avatar_url: string | null
-          brand_id: string | null
-          created_at: string | null
-          email: string | null
-          full_name: string | null
-          id: string
-          phone: string | null
-          pos_pin: string | null
-          role: string | null
-          status: string | null
-          store_id: string | null
-          wallet_balance: number | null
-        }[]
-        SetofOptions: {
-          from: "*"
-          to: "profiles"
-          isOneToOne: false
-          isSetofReturn: true
-        }
-      }
-      get_pos_store_config: {
-        Args: { p_store_id: string }
-        Returns: {
-          address: string
-          brand_id: string
-          currency: string
-          id: string
-          name: string
-        }[]
-      }
       gettransactionid: { Args: never; Returns: unknown }
-      is_admin: { Args: never; Returns: boolean }
-      is_super_admin: { Args: never; Returns: boolean }
       longtransactionsenabled: { Args: never; Returns: boolean }
       populate_geometry_columns:
         | { Args: { tbl_oid: unknown; use_typmod?: boolean }; Returns: number }
@@ -2551,10 +2493,6 @@ export type Database = {
         Returns: unknown
       }
       unlockrows: { Args: { "": string }; Returns: number }
-      update_order_status_pos: {
-        Args: { new_status: string; target_order_id: string }
-        Returns: Json
-      }
       updategeometrysrid: {
         Args: {
           catalogn_name: string
@@ -2572,11 +2510,11 @@ export type Database = {
         | "confirmed"
         | "preparing"
         | "ready"
-        | "out_for_delivery"
+        | "delivering"
         | "delivered"
         | "cancelled"
-      payment_status: "pending" | "collected" | "remitted" | "partially_paid"
-      product_type: "simple" | "variable" | "combo" | "pos_only"
+      payment_status: "pending" | "paid" | "failed" | "refunded"
+      product_type: "simple" | "variable" | "combo"
     }
     CompositeTypes: {
       geometry_dump: {
@@ -2717,12 +2655,12 @@ export const Constants = {
         "confirmed",
         "preparing",
         "ready",
-        "out_for_delivery",
+        "delivering",
         "delivered",
         "cancelled",
       ],
-      payment_status: ["pending", "collected", "remitted", "partially_paid"],
-      product_type: ["simple", "variable", "combo", "pos_only"],
+      payment_status: ["pending", "paid", "failed", "refunded"],
+      product_type: ["simple", "variable", "combo"],
     },
   },
 } as const

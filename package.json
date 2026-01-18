@@ -10,13 +10,17 @@
     "update-types": "npx supabase gen types typescript --project-id \"kdoodpxjgczqajykcqcd\" > types/supabase.ts"
   },
   "dependencies": {
+    "@react-three/drei": "^9.99.0",
+    "@react-three/fiber": "^8.15.16",
     "@supabase/supabase-js": "^2.39.0",
-    "clsx": "^2.1.0",
+    "@types/three": "^0.160.0",
+    "clsx": "^2.1.1",
     "lucide-react": "^0.344.0",
     "next": "^14.2.23",
     "react": "18.3.1",
     "react-dom": "18.3.1",
-    "tailwind-merge": "^2.2.1",
+    "tailwind-merge": "^2.6.0",
+    "three": "^0.160.0",
     "zustand": "^4.5.0"
   },
   "devDependencies": {
